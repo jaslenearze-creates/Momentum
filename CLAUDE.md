@@ -53,7 +53,13 @@ state = {
 ```
 
 Task objects also carry `delegatedTo` / `delegatedEmail` (both `""` by default) —
-used only to pre-fill a `mailto:` draft, no accounts or sync involved.
+used only to pre-fill a `mailto:` draft, no accounts or sync involved. The `taskDelegateEmail`
+field is `type="email"` and validated with `isValidEmail()` before being used as a mailto
+recipient — an invalid/non-email value (e.g. a note typed into the wrong field) opens with a
+blank "To:" rather than silently stuffing garbage into it. Tasks also carry
+`delegationLog: [{ id, at, type: "email"|"copy"|"note", detail }]` — every "Draft an email" or
+"Copy message" action logs itself automatically (an honest audit trail of chasing), and the
+same log accepts free-text manual notes via its own input, newest entry first.
 
 `state.cycle = { periods: [{ id, startDate: "YYYY-MM-DD", endDate: "YYYY-MM-DD"|null }] }`
 — period cycle tracker. Fully local, included in the JSON backup like everything

@@ -417,6 +417,12 @@
   .subtask-add input:focus { border-color: var(--accent); }
   .subtask-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
+  .log-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .log-row:last-child { border-bottom: none; }
+  .log-row .log-icon { flex-shrink: 0; font-size: 13px; margin-top: 1px; }
+  .log-row .log-text { flex: 1; font-size: 13px; word-break: break-word; }
+  .log-row .log-when { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
   .photo-grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .photo-grid:empty { display: none; }
   .photo-thumb { position: relative; width: 72px; height: 72px; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
@@ -878,7 +884,7 @@
 
     <div class="field-label">Delegate (optional)</div>
     <input type="text" id="taskDelegateName" placeholder="Their name, e.g. Sam" maxlength="80" />
-    <input type="text" id="taskDelegateEmail" placeholder="Their email (optional, for the draft)" maxlength="200" style="margin-top:8px;" />
+    <input type="email" id="taskDelegateEmail" placeholder="their@email.com (optional, for the draft)" maxlength="200" style="margin-top:8px;" />
     <div class="modal-actions" style="margin-top:8px;">
       <button class="btn ghost" id="taskDelegateEmailBtn">✉️ Draft an email</button>
       <button class="btn ghost" id="taskDelegateCopyBtn">📋 Copy message</button>
@@ -886,6 +892,13 @@
     <div class="subtask-hint" id="delegateHint">If "Draft an email" doesn't open anything (no mail app set up), use Copy — then paste into email, WhatsApp, or a text.</div>
     <button class="btn ghost" id="taskAskClaudeBtn" style="width:100%; margin-top:10px;">✨ Ask Claude to help write this</button>
     <div class="subtask-hint">Opens claude.ai in a new tab with this task pre-filled, so Claude can draft the wording. You'll paste the result back yourself — no app can write directly into another one's data.</div>
+
+    <div class="field-label">Chase log</div>
+    <div id="delegationLogList"></div>
+    <div class="subtask-add">
+      <input type="text" id="delegationNoteInput" placeholder="Add a note, e.g. &quot;said he'd do it Friday&quot;…" maxlength="200" />
+    </div>
+    <div class="subtask-hint">Every email/copy is logged automatically — press enter here to add your own note too.</div>
 
     <div class="modal-actions">
       <button class="btn ghost" id="taskMoveBtn">Move</button>
@@ -1796,6 +1809,7 @@
     renderEnergyPicker(t);
     renderSubtasksModal(t);
     renderTaskPhotos(id);
+    renderDelegationLog(t);
     openModal("taskModalOverlay");
     setTimeout(()=>document.getElementById("subtaskInput").focus(), 250);
   }
@@ -2304,29 +2318,77 @@
     const subtaskLines = t.subtasks.length ? "\n\nSteps involved:\n" + t.subtasks.map(s=>"- "+s.title).join("\n") : "";
     return `Hola${name ? " " + name : ""}!\n\nCould you help me with this: ${t.title}${t.notes ? "\n\n" + t.notes : ""}${subtaskLines}\n\nThanks!`;
   }
+  function isValidEmail(str){
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+  }
+  function logDelegation(t, type, detail){
+    if(!t.delegationLog) t.delegationLog = [];
+    t.delegationLog.unshift({ id: uid(), at: Date.now(), type, detail });
+    save();
+  }
+  function renderDelegationLog(t){
+    const el = document.getElementById("delegationLogList");
+    const log = t.delegationLog || [];
+    if(!log.length){
+      el.innerHTML = `<div class="subtask-hint">No activity yet — sends and notes will show up here.</div>`;
+      return;
+    }
+    el.innerHTML = log.map(e => {
+      const icon = e.type === "email" ? "✉️" : e.type === "copy" ? "📋" : "📝";
+      const label = e.type === "email" ? `Emailed ${e.detail}` : e.type === "copy" ? `Copied message for ${e.detail}` : e.detail;
+      const when = new Date(e.at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " +
+        new Date(e.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      return `<div class="log-row"><span class="log-icon">${icon}</span><div class="log-text">${escapeHtml(label)}<div class="log-when">${when}</div></div></div>`;
+    }).join("");
+  }
   document.getElementById("taskDelegateEmailBtn").addEventListener("click", () => {
     const t = getTask(editingTaskId);
     if(!t) return;
-    const email = document.getElementById("taskDelegateEmail").value.trim();
+    const rawEmail = document.getElementById("taskDelegateEmail").value.trim();
+    const name = document.getElementById("taskDelegateName").value.trim();
+    let toAddress = "";
+    if(rawEmail){
+      if(isValidEmail(rawEmail)){
+        toAddress = rawEmail;
+      } else {
+        toast("That doesn't look like an email address — opening with the recipient blank so nothing gets sent to the wrong place.");
+      }
+    }
     const body = buildDelegateMessage(t);
-    const mailto = `mailto:${email}?subject=${encodeURIComponent("Could you help with: " + t.title)}&body=${encodeURIComponent(body)}`;
+    const mailto = `mailto:${toAddress}?subject=${encodeURIComponent("Could you help with: " + t.title)}&body=${encodeURIComponent(body)}`;
     const a = document.createElement("a");
     a.href = mailto;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
-    toast("Opening your email app — nothing happens? Use Copy message instead.");
+    logDelegation(t, "email", name || toAddress || "someone");
+    renderDelegationLog(t);
+    if(toAddress || !rawEmail) toast("Opening your email app — nothing happens? Use Copy message instead.");
   });
   document.getElementById("taskDelegateCopyBtn").addEventListener("click", async () => {
     const t = getTask(editingTaskId);
     if(!t) return;
     try {
       await navigator.clipboard.writeText(buildDelegateMessage(t));
+      const name = document.getElementById("taskDelegateName").value.trim();
+      logDelegation(t, "copy", name || "message");
+      renderDelegationLog(t);
       toast("Message copied — paste it anywhere: email, text, WhatsApp");
     } catch(e){
       toast("Couldn't copy — your browser may need clipboard permission");
     }
+  });
+  document.getElementById("delegationNoteInput").addEventListener("keydown", e => {
+    if(e.key !== "Enter") return;
+    const input = e.target;
+    const val = input.value.trim();
+    if(!val) return;
+    const t = getTask(editingTaskId);
+    if(!t) return;
+    logDelegation(t, "note", val);
+    input.value = "";
+    renderDelegationLog(t);
   });
   document.getElementById("taskAskClaudeBtn").addEventListener("click", () => {
     const t = getTask(editingTaskId);
