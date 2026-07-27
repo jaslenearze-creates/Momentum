@@ -838,6 +838,8 @@
 
     <div class="field-label">Schedule for a day (optional)</div>
     <input type="date" id="taskSchedule" />
+    <button class="btn ghost" id="taskGCalBtn" style="width:100%; margin-top:8px;">📅 Add to Google Calendar</button>
+    <div class="subtask-hint">Opens Google Calendar with this pre-filled — you save it there. Same reason as the email button: no app can write directly into another one's data.</div>
 
     <div class="field-label">Notes (optional)</div>
     <textarea id="taskNotes" rows="3" placeholder="Any context…"></textarea>
@@ -950,6 +952,14 @@
     <input type="file" id="importFileInput" accept="application/json" style="display:none;">
     <div class="subtask-hint" id="lastBackupHint" style="margin-top:8px;"></div>
 
+    <div class="field-label" style="margin-top:22px;">App updates</div>
+    <p style="font-size:13px; color:var(--text-muted); margin:0 0 10px; line-height:1.5;">
+      Momentum checks for a newer version automatically and prompts you when one's ready. If you
+      just want to check right now instead of waiting:
+    </p>
+    <button class="btn ghost" id="checkUpdateBtn" style="width:100%;">🔄 Check for updates</button>
+    <div class="subtask-hint" id="updateStatusHint" style="margin-top:8px;"></div>
+
     <div class="field-label" style="margin-top:22px;">Progress-sharing reminder</div>
     <p style="font-size:13px; color:var(--text-muted); margin:0 0 10px; line-height:1.5;">
       If you want a nudge to send your log to someone (accountability partner, therapist), pick a
@@ -1003,6 +1013,31 @@
     return `${y}-${m}-${day}`;
   }
   function addDays(d, n){ const c = new Date(d); c.setDate(c.getDate()+n); return c; }
+
+  const WEEKDAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+  function resolveWeekday(name, forceNext){
+    const target = WEEKDAYS.indexOf(name.toLowerCase());
+    const now = new Date();
+    let diff = (target - now.getDay() + 7) % 7;
+    if(diff === 0 && forceNext) diff = 7;
+    return fmtDate(addDays(now, diff));
+  }
+  function parseNaturalDate(text){
+    const patterns = [
+      { re: /\s+today$/i, resolve: () => todayStr() },
+      { re: /\s+(?:tomorrow|tmrw)$/i, resolve: () => fmtDate(addDays(new Date(), 1)) },
+      { re: /\s+next\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/i, resolve: m => resolveWeekday(m[1], true) },
+      { re: /\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/i, resolve: m => resolveWeekday(m[1], false) }
+    ];
+    for(const p of patterns){
+      const m = text.match(p.re);
+      if(m){
+        const title = text.slice(0, m.index).trim();
+        if(title) return { title, date: p.resolve(m) };
+      }
+    }
+    return null;
+  }
 
   function defaultHabits(){
     const titles = ["Shower", "Call mum", "Take supplements", "Plan today's tasks"];
@@ -1976,12 +2011,21 @@
     const input = document.getElementById("captureInput");
     const val = input.value.trim();
     if(!val) return;
-    const t = addTask(val);
+    const parsed = parseNaturalDate(val);
+    const t = parsed
+      ? addTask(parsed.title, { scheduledDate: parsed.date })
+      : addTask(val);
     input.value = "";
     renderAll();
-    toast("Added to backlog", "→ Today instead", () => {
-      t.inToday = true; t.order = Date.now(); save(); renderAll();
-    });
+    if(parsed){
+      const label = parsed.date === todayStr() ? "today" :
+        new Date(parsed.date + "T00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      toast(`Scheduled for ${label}`, "Undo date", () => {
+        t.scheduledDate = null; save(); renderAll();
+      });
+    } else {
+      toast("Added to backlog", "📅 Set a date", () => openTaskDetail(t.id));
+    }
   }
 
   /* ---------------- Voice capture ---------------- */
@@ -2120,6 +2164,23 @@
     t.scheduledDate = document.getElementById("taskSchedule").value || null;
     save(); renderAll();
   });
+  document.getElementById("taskGCalBtn").addEventListener("click", () => {
+    const t = getTask(editingTaskId);
+    if(!t) return;
+    const dateStr = document.getElementById("taskSchedule").value;
+    if(!dateStr){ toast("Pick a date above first"); return; }
+    const start = dateStr.replace(/-/g, "");
+    const end = fmtDate(addDays(new Date(dateStr + "T00:00"), 1)).replace(/-/g, "");
+    const subtaskLines = t.subtasks.length ? "\n\nSteps:\n" + t.subtasks.map(s=>"- "+s.title).join("\n") : "";
+    const details = `${t.notes || ""}${subtaskLines}`.trim();
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: t.title,
+      dates: `${start}/${end}`,
+      details
+    });
+    window.open("https://calendar.google.com/calendar/render?" + params.toString(), "_blank", "noopener");
+  });
   document.getElementById("subtaskInput").addEventListener("keydown", e => {
     if(e.key !== "Enter") return;
     const input = e.target;
@@ -2206,7 +2267,7 @@
   function buildDelegateMessage(t){
     const name = document.getElementById("taskDelegateName").value.trim();
     const subtaskLines = t.subtasks.length ? "\n\nSteps involved:\n" + t.subtasks.map(s=>"- "+s.title).join("\n") : "";
-    return `Hi${name ? " " + name : ""},\n\nCould you help me with this: ${t.title}${t.notes ? "\n\n" + t.notes : ""}${subtaskLines}\n\nThanks!`;
+    return `Hola${name ? " " + name : ""}!\n\nCould you help me with this: ${t.title}${t.notes ? "\n\n" + t.notes : ""}${subtaskLines}\n\nThanks!`;
   }
   document.getElementById("taskDelegateEmailBtn").addEventListener("click", () => {
     const t = getTask(editingTaskId);
@@ -2403,21 +2464,45 @@
   }
 
   /* ---------------- PWA: service worker + install ---------------- */
+  let swRegistration = null;
+  function watchForUpdate(reg){
+    reg.addEventListener("updatefound", () => {
+      const installing = reg.installing;
+      if(!installing) return;
+      installing.addEventListener("statechange", () => {
+        if(installing.state === "installed" && navigator.serviceWorker.controller){
+          toast("A newer version is ready.", "Refresh", () => location.reload());
+          const hint = document.getElementById("updateStatusHint");
+          if(hint) hint.textContent = "A newer version is ready — tap Refresh in the toast, or reload the page.";
+        }
+      });
+    });
+  }
   if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("sw.js").then(reg => {
-        reg.addEventListener("updatefound", () => {
-          const installing = reg.installing;
-          if(!installing) return;
-          installing.addEventListener("statechange", () => {
-            if(installing.state === "installed" && navigator.serviceWorker.controller){
-              toast("A newer version is ready.", "Refresh", () => location.reload());
-            }
-          });
-        });
+        swRegistration = reg;
+        watchForUpdate(reg);
       }).catch(() => { /* offline install not available, app still works */ });
     });
   }
+  document.getElementById("checkUpdateBtn").addEventListener("click", async () => {
+    const hint = document.getElementById("updateStatusHint");
+    if(!swRegistration){ hint.textContent = "Updates aren't available in this browsing context."; return; }
+    hint.textContent = "Checking…";
+    try {
+      await swRegistration.update();
+      setTimeout(() => {
+        if(swRegistration.installing || swRegistration.waiting){
+          hint.textContent = "A newer version is ready — tap Refresh in the toast, or reload the page.";
+        } else {
+          hint.textContent = "You're on the latest version.";
+        }
+      }, 1200);
+    } catch(e){
+      hint.textContent = "Couldn't check right now — try again later.";
+    }
+  });
 
   /* ---------------- Init ---------------- */
   renderAll();
