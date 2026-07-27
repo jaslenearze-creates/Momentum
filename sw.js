@@ -1,4 +1,4 @@
-const CACHE_VERSION = "momentum-v1";
+const CACHE_VERSION = "momentum-v2";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",

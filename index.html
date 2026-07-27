@@ -620,6 +620,33 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
   .toast button { color: var(--accent-strong); font-weight: 800; font-size: 12px; white-space: nowrap; }
 
+  .update-banner {
+    position: fixed;
+    bottom: calc(90px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--accent);
+    color: var(--text);
+    padding: 12px 12px 12px 18px;
+    border-radius: 18px;
+    font-size: 13.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 65;
+    max-width: 92vw;
+  }
+  .update-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .update-banner-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .update-banner-actions .btn.primary { padding: 8px 16px; flex: none; font-size: 13px; }
+  .update-banner-actions .icon-btn { width: 30px; height: 30px; font-size: 12px; box-shadow: none; }
+
   /* ---------- Confetti ---------- */
   .confetti-piece {
     position: fixed;
@@ -998,6 +1025,14 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="update-banner" id="updateBanner">
+  <span>🔄 A newer version of Momentum is ready</span>
+  <div class="update-banner-actions">
+    <button class="btn primary" id="updateBannerRefreshBtn">Refresh</button>
+    <button class="icon-btn" id="updateBannerCloseBtn">✕</button>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -2465,15 +2500,22 @@
 
   /* ---------------- PWA: service worker + install ---------------- */
   let swRegistration = null;
+  function showUpdateBanner(){
+    document.getElementById("updateBanner").classList.add("show");
+    const hint = document.getElementById("updateStatusHint");
+    if(hint) hint.textContent = "A newer version is ready — tap Refresh at the bottom of the screen.";
+  }
+  document.getElementById("updateBannerRefreshBtn").addEventListener("click", () => location.reload());
+  document.getElementById("updateBannerCloseBtn").addEventListener("click", () => {
+    document.getElementById("updateBanner").classList.remove("show");
+  });
   function watchForUpdate(reg){
     reg.addEventListener("updatefound", () => {
       const installing = reg.installing;
       if(!installing) return;
       installing.addEventListener("statechange", () => {
         if(installing.state === "installed" && navigator.serviceWorker.controller){
-          toast("A newer version is ready.", "Refresh", () => location.reload());
-          const hint = document.getElementById("updateStatusHint");
-          if(hint) hint.textContent = "A newer version is ready — tap Refresh in the toast, or reload the page.";
+          showUpdateBanner();
         }
       });
     });
@@ -2483,6 +2525,11 @@
       navigator.serviceWorker.register("sw.js").then(reg => {
         swRegistration = reg;
         watchForUpdate(reg);
+        // Catch the case where an update finished installing in the background
+        // while the app was closed (skipWaiting+clients.claim already applied it,
+        // so there's no 'updatefound' event this load — check .waiting directly).
+        if(reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+        setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
       }).catch(() => { /* offline install not available, app still works */ });
     });
   }
@@ -2494,7 +2541,7 @@
       await swRegistration.update();
       setTimeout(() => {
         if(swRegistration.installing || swRegistration.waiting){
-          hint.textContent = "A newer version is ready — tap Refresh in the toast, or reload the page.";
+          showUpdateBanner();
         } else {
           hint.textContent = "You're on the latest version.";
         }
