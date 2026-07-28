@@ -11,13 +11,22 @@ Single-user task/goal app. No backend, no build step. Ships as a static site
 - `manifest.json` — PWA manifest (installable "Add to Home Screen").
 - `sw.js` — service worker: caches the app shell for offline use, network-first
   for `index.html` so updates roll out promptly, cache-first for static assets.
-- `icons/` — app icons (192, 512, 512-maskable, 180/apple-touch). Built from a
-  user-supplied "M" sticker artwork composited onto the app's actual purple
-  accent gradient (`--accent` → `--accent-strong`), via a one-off Pillow script
-  (chroma-keys the white sticker background to transparent, trims to content,
-  composites per size — maskable gets extra padding for the safe zone, the
-  apple-touch icon is flattened opaque since iOS doesn't handle alpha there).
-  Not committed; regenerate from the source PNG if the artwork ever changes.
+- `icons/` — app icons (192, 512, 512-maskable, 180/apple-touch), plus two
+  header/branding assets built from the same source: `logo-mark.png`
+  (transparent-background trim of just the M artwork, used inline in the
+  header wordmark) and `og-image.png` (1200×630 social share preview — M mark
+  + "omentum" wordmark in Georgia Bold Italic + tagline, same purple gradient).
+  All built from a user-supplied "M" sticker artwork composited onto the app's
+  actual purple accent gradient (`--accent` → `--accent-strong`), via a one-off
+  Pillow script (chroma-keys the white sticker background to transparent,
+  trims to content, composites per size — maskable gets extra padding for the
+  safe zone, the apple-touch icon is flattened opaque since iOS doesn't handle
+  alpha there). Committed to the repo; regenerate from the source PNG (not
+  committed — lives outside the repo) if the artwork ever changes.
+  The header itself (`.brand h1`) renders the M as an inline `<img>` followed
+  by "omentum" in Georgia Bold Italic, so together they read "Momentum" with a
+  graphic first letter — the `<h1>` carries `aria-label="Momentum"` with both
+  children `aria-hidden` so screen readers get the plain word, not "M omentum".
 - `google-apps-script/` — a separate, optional piece: a Gmail → Gemini →
   Google Sheet task-suggestion script. Runs entirely inside the user's own
   Google account (no server, no OAuth app registration). Not wired into

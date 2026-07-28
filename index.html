@@ -13,6 +13,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#fdfcff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#17131f" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Momentum — your daily flow">
+<meta property="og:description" content="A low-friction daily task app, built for ADHD: small Today lists, one-tap capture, visible momentum.">
+<meta property="og:image" content="https://jaslenearze-creates.github.io/Momentum/icons/og-image.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Momentum — your daily flow">
+<meta name="twitter:description" content="A low-friction daily task app, built for ADHD.">
+<meta name="twitter:image" content="https://jaslenearze-creates.github.io/Momentum/icons/og-image.png">
 <style>
   :root {
     --bg: #fdfcff;
@@ -141,10 +149,23 @@
     gap: 8px;
   }
   .brand h1 {
-    font-size: 20px;
+    display: inline-flex;
+    align-items: center;
     margin: 0;
+  }
+  .brand-mark {
+    height: 34px;
+    width: auto;
+    margin-right: -6px;
+    margin-bottom: -3px;
+  }
+  .brand-word {
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    font-size: 21px;
+    letter-spacing: -0.01em;
+    color: var(--text);
   }
   .brand .clock {
     font-size: 13px;
@@ -748,7 +769,7 @@
   <header class="top">
     <div class="top-row">
       <div class="brand">
-        <h1>Momentum</h1>
+        <h1 aria-label="Momentum"><img class="brand-mark" src="icons/logo-mark.png" alt="" aria-hidden="true"><span class="brand-word" aria-hidden="true">omentum</span></h1>
         <span class="clock" id="clock"></span>
         <span class="sync-indicator" id="syncIndicator" title="All changes save automatically to this device">●&nbsp;saved</span>
       </div>
