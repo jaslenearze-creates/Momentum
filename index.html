@@ -2106,7 +2106,8 @@
     micBtn.style.display = "none";
   } else {
     micBtn.addEventListener("click", () => {
-      if(isListening){ recognizer.stop(); return; }
+      if(isListening){ recognizer && recognizer.stop(); return; }
+      isListening = true; // set synchronously so a fast double-tap can't start a second session
       startListening();
     });
   }
@@ -2115,22 +2116,21 @@
     recognizer.lang = navigator.language || "en-US";
     recognizer.continuous = true;
     recognizer.interimResults = true;
-    let finalTranscript = "";
+    const finalResults = []; // indexed by result index — re-firing the same index just overwrites, never duplicates
     const input = document.getElementById("captureInput");
 
     recognizer.onstart = () => {
-      isListening = true;
       micBtn.classList.add("listening");
       document.getElementById("micHint").classList.add("show");
     };
     recognizer.onresult = e => {
       let interim = "";
-      for(let i = e.resultIndex; i < e.results.length; i++){
+      for(let i = 0; i < e.results.length; i++){
         const transcript = e.results[i][0].transcript;
-        if(e.results[i].isFinal) finalTranscript += transcript + " ";
+        if(e.results[i].isFinal) finalResults[i] = transcript;
         else interim += transcript;
       }
-      input.value = finalTranscript + interim;
+      input.value = finalResults.filter(Boolean).join(" ") + (interim ? " " + interim : "");
     };
     recognizer.onerror = e => {
       if(e.error === "not-allowed") toast("Microphone access was blocked — check your browser's site permissions.");
@@ -2141,6 +2141,7 @@
       micBtn.classList.remove("listening");
       document.getElementById("micHint").classList.remove("show");
       input.value = "";
+      const finalTranscript = finalResults.filter(Boolean).join(" ");
       const created = splitIntoTasks(finalTranscript);
       if(created.length){
         created.forEach(title => addTask(title));
