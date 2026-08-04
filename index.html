@@ -473,6 +473,25 @@
   .energy-picker button.on.low { background: var(--accent-soft); color: var(--accent-strong); }
   .energy-picker button.on.focus { background: var(--warm-soft); color: var(--warm); }
 
+  .energy-filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .energy-filter-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+  .energy-filter-row .chip { cursor: pointer; font-size: 12px; padding: 6px 12px; }
+  .energy-filter-row .chip.energy-low.active { background: var(--accent); color: #fff; }
+  .energy-filter-row .chip.energy-focus.active { background: var(--warm); color: #fff; }
+
+  .stale-note {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .stale-note button { font-weight: 700; color: var(--accent-strong); font-size: 12.5px; white-space: nowrap; margin-left: auto; }
+
   /* ---------- Habits ---------- */
   li.habit-card { background: var(--accent-soft); }
   :root[data-theme="dark"] li.habit-card { background: #241d40; }
@@ -774,6 +793,7 @@
         <span class="sync-indicator" id="syncIndicator" title="All changes save automatically to this device">●&nbsp;saved</span>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" id="searchBtn" title="Search tasks">🔍</button>
         <button class="icon-btn" id="quoteBtn" title="A boost">✨</button>
         <button class="icon-btn" id="askClaudeGlobalBtn" title="Ask Claude about today">💬</button>
         <button class="icon-btn" id="shareBtn" title="Share today's log">🔗</button>
@@ -824,6 +844,12 @@
 
     <section class="view" id="view-backlog">
       <div class="section-label">🌱 Someday / backlog</div>
+      <div class="energy-filter-row" id="energyFilterRow">
+        <span class="energy-filter-label">How are you feeling?</span>
+        <button class="chip energy-low" data-energy-filter="low">🌙 Low energy</button>
+        <button class="chip energy-focus" data-energy-filter="focus">🔥 Needs focus</button>
+      </div>
+      <div id="staleBacklogNote"></div>
       <div id="backlogList"></div>
       <div class="section-label" style="margin-top:26px;">🔁 Habits</div>
       <div id="habitsList"></div>
@@ -862,6 +888,17 @@
       <div class="cycle-status-card" id="cycleStatusCard"></div>
       <div class="section-label" style="margin-top:22px;">History</div>
       <div id="cycleHistory"></div>
+      <button class="btn ghost" id="addPastPeriodBtn" style="width:100%; margin-top:10px;">+ Add a missed period</button>
+      <div id="addPastPeriodForm" style="display:none; margin-top:10px;">
+        <div class="field-label">Start date</div>
+        <input type="date" id="pastPeriodStart" />
+        <div class="field-label">End date (optional)</div>
+        <input type="date" id="pastPeriodEnd" />
+        <div class="modal-actions" style="margin-top:10px;">
+          <button class="btn primary" id="savePastPeriodBtn">Save</button>
+          <button class="btn ghost" id="cancelPastPeriodBtn">Cancel</button>
+        </div>
+      </div>
       <div class="insight-empty" style="margin-top:14px;">🔒 Stored only on this device, never uploaded anywhere. Predictions are estimates based on your own recent cycles, not medical advice.</div>
     </section>
   </main>
@@ -979,6 +1016,34 @@
   </div>
 </div>
 
+<!-- Stale Review Modal -->
+<div class="modal-overlay" id="staleModalOverlay">
+  <div class="modal" style="position:relative;">
+    <div class="modal-handle"></div>
+    <button class="icon-btn modal-close" data-close="staleModalOverlay">✕</button>
+    <h2>A few things sitting a while</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin:0 0 10px; line-height:1.5;">
+      No judgment — some things just aren't relevant anymore. Tick anything worth clearing out, or leave it all and close this.
+    </p>
+    <div id="staleList"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="staleKeepAllBtn">Keep all</button>
+      <button class="btn danger" id="staleClearBtn">Clear selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- Search Modal -->
+<div class="modal-overlay" id="searchModalOverlay">
+  <div class="modal" style="position:relative;">
+    <div class="modal-handle"></div>
+    <button class="icon-btn modal-close" data-close="searchModalOverlay">✕</button>
+    <h2>Search tasks</h2>
+    <input type="text" id="searchInput" placeholder="Search by title…" maxlength="200" />
+    <div id="searchResults" style="margin-top:14px;"></div>
+  </div>
+</div>
+
 <!-- Share Modal -->
 <div class="modal-overlay" id="shareModalOverlay">
   <div class="modal" style="position:relative;">
@@ -1020,6 +1085,15 @@
     </p>
     <button class="btn ghost" id="checkUpdateBtn" style="width:100%;">🔄 Check for updates</button>
     <div class="subtask-hint" id="updateStatusHint" style="margin-top:8px;"></div>
+
+    <div class="field-label" style="margin-top:22px;">Daily reminder</div>
+    <p style="font-size:13px; color:var(--text-muted); margin:0 0 10px; line-height:1.5;">
+      A nudge listing what's scheduled for today. Honest limit: this only fires when you actually
+      open the app (or it's been open recently) — there's no backend here to push a notification
+      while the app is fully closed, so it's a "when you show up" reminder, not a guaranteed alarm.
+    </p>
+    <button class="btn ghost" id="enableNotifyBtn" style="width:100%;">🔔 Enable daily reminder</button>
+    <div class="subtask-hint" id="notifyStatusHint" style="margin-top:8px;"></div>
 
     <div class="field-label" style="margin-top:22px;">Progress-sharing reminder</div>
     <p style="font-size:13px; color:var(--text-muted); margin:0 0 10px; line-height:1.5;">
@@ -1116,7 +1190,7 @@
     return {
       version: 1, tasks: [], habits: defaultHabits(), timerSessions: [],
       cycle: { periods: [] },
-      settings: { theme: "auto", shareReminderDays: 0, lastShareAt: null, lastBackupAt: null, lastReminderShownDate: null, lastQuoteShownDate: null }
+      settings: { theme: "auto", shareReminderDays: 0, lastShareAt: null, lastBackupAt: null, lastReminderShownDate: null, lastQuoteShownDate: null, notifyEnabled: false, lastNotifyDate: null }
     };
   }
 
@@ -1416,7 +1490,7 @@
 
   /* ---------------- Task helpers ---------------- */
   function getTask(id){ return state.tasks.find(t => t.id === id); }
-  function isInToday(t){ return !t.completed && (t.inToday || t.scheduledDate === todayStr()); }
+  function isInToday(t){ return !t.completed && (t.inToday || (!!t.scheduledDate && t.scheduledDate <= todayStr())); }
 
   function addTask(title, opts){
     opts = opts || {};
@@ -1720,15 +1794,51 @@
   }
 
   /* ---------------- Render: Backlog view ---------------- */
+  let energyFilter = null;
+  const STALE_DAYS = 30;
   function renderBacklog(){
-    const items = state.tasks.filter(t => !t.completed && !isInToday(t)).sort((a,b)=>b.createdAt-a.createdAt);
+    let items = state.tasks.filter(t => !t.completed && !isInToday(t)).sort((a,b)=>b.createdAt-a.createdAt);
+    if(energyFilter) items = items.filter(t => t.energy === energyFilter);
+
+    document.querySelectorAll("#energyFilterRow [data-energy-filter]").forEach(b => {
+      b.classList.toggle("active", energyFilter === b.dataset.energyFilter);
+    });
+
     const listEl = document.getElementById("backlogList");
-    listEl.innerHTML = items.length ? `<ul class="task-list">${items.map(t=>taskCardHtml(t,{moveLabel:"Move to today", moveIcon:"→"})).join("")}</ul>` :
-      `<div class="empty-state"><span class="emoji">📥</span>Backlog's empty.<div class="sub">Anything you capture lands here until you're ready for it.</div></div>`;
+    if(items.length){
+      listEl.innerHTML = `<ul class="task-list">${items.map(t=>taskCardHtml(t,{moveLabel:"Move to today", moveIcon:"→"})).join("")}</ul>`;
+    } else if(energyFilter){
+      listEl.innerHTML = `<div class="empty-state"><span class="emoji">🤷</span>Nothing tagged for that right now.<div class="sub">Tag a task's energy from its detail view to see it here.</div></div>`;
+    } else {
+      listEl.innerHTML = `<div class="empty-state"><span class="emoji">📥</span>Backlog's empty.<div class="sub">Anything you capture lands here until you're ready for it.</div></div>`;
+    }
+
+    const staleThreshold = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
+    const staleItems = state.tasks.filter(t => !t.completed && !isInToday(t) && !t.scheduledDate && t.createdAt < staleThreshold);
+    document.getElementById("staleBacklogNote").innerHTML = staleItems.length ? `
+      <div class="stale-note">
+        <span>🌱 ${staleItems.length} thing${staleItems.length === 1 ? "" : "s"} sitting for a month+</span>
+        <button id="reviewStaleBtn">Review</button>
+      </div>
+    ` : "";
 
     const habitsEl = document.getElementById("habitsList");
     habitsEl.innerHTML = state.habits.length ? `<ul class="task-list">${state.habits.map(habitCardHtml).join("")}</ul>` :
       `<div class="empty-state"><span class="emoji">🔁</span>No recurring habits yet.</div>`;
+  }
+  function getStaleTasks(){
+    const staleThreshold = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
+    return state.tasks.filter(t => !t.completed && !isInToday(t) && !t.scheduledDate && t.createdAt < staleThreshold);
+  }
+  function openStaleModal(){
+    const stale = getStaleTasks();
+    document.getElementById("staleList").innerHTML = stale.map(t => `
+      <div class="subtask-row">
+        <button class="checkbox" data-stale-toggle="${t.id}"></button>
+        <div class="st-title">${escapeHtml(t.title)}</div>
+      </div>
+    `).join("");
+    openModal("staleModalOverlay");
   }
 
   /* ---------------- Render: Calendar view ---------------- */
@@ -1962,6 +2072,24 @@
     if(!doneToday.length && !habitsDone.length) lines.push("Quiet day — that's okay too.");
     return lines.join("\n");
   }
+  function openSearchModal(){
+    document.getElementById("searchInput").value = "";
+    document.getElementById("searchResults").innerHTML = `<div class="empty-state"><span class="emoji">🔍</span>Start typing to search every task — backlog, today, and completed.</div>`;
+    openModal("searchModalOverlay");
+    setTimeout(() => document.getElementById("searchInput").focus(), 250);
+  }
+  function renderSearchResults(query){
+    const el = document.getElementById("searchResults");
+    const q = query.trim().toLowerCase();
+    if(!q){
+      el.innerHTML = `<div class="empty-state"><span class="emoji">🔍</span>Start typing to search every task — backlog, today, and completed.</div>`;
+      return;
+    }
+    const matches = state.tasks.filter(t => t.title.toLowerCase().includes(q)).sort((a,b) => b.createdAt - a.createdAt);
+    el.innerHTML = matches.length
+      ? `<ul class="task-list">${matches.map(t => taskCardHtml(t, {})).join("")}</ul>`
+      : `<div class="empty-state"><span class="emoji">🤷</span>No tasks match "${escapeHtml(query.trim())}".</div>`;
+  }
   function openShareModal(){
     document.getElementById("sharePreview").textContent = buildShareSummary();
     openModal("shareModalOverlay");
@@ -2075,6 +2203,57 @@
     const delBtn = e.target.closest("[data-cycle-del]");
     if(delBtn) deletePeriod(delBtn.dataset.cycleDel);
   });
+  document.getElementById("addPastPeriodBtn").addEventListener("click", () => {
+    document.getElementById("addPastPeriodForm").style.display = "block";
+    document.getElementById("pastPeriodStart").value = "";
+    document.getElementById("pastPeriodEnd").value = "";
+    document.getElementById("pastPeriodStart").focus();
+  });
+  document.getElementById("cancelPastPeriodBtn").addEventListener("click", () => {
+    document.getElementById("addPastPeriodForm").style.display = "none";
+  });
+  document.getElementById("savePastPeriodBtn").addEventListener("click", () => {
+    const start = document.getElementById("pastPeriodStart").value;
+    const end = document.getElementById("pastPeriodEnd").value || null;
+    if(!start){ toast("Pick a start date first"); return; }
+    if(end && end < start){ toast("End date is before the start date"); return; }
+    state.cycle.periods.push({ id: uid(), startDate: start, endDate: end });
+    save();
+    document.getElementById("addPastPeriodForm").style.display = "none";
+    renderAll();
+    toast("Added to your cycle history");
+  });
+
+  document.getElementById("energyFilterRow").addEventListener("click", e => {
+    const btn = e.target.closest("[data-energy-filter]");
+    if(!btn) return;
+    energyFilter = energyFilter === btn.dataset.energyFilter ? null : btn.dataset.energyFilter;
+    renderBacklog();
+  });
+  document.getElementById("staleBacklogNote").addEventListener("click", e => {
+    if(e.target.closest("#reviewStaleBtn")) openStaleModal();
+  });
+  let staleSelected = new Set();
+  document.getElementById("staleList").addEventListener("click", e => {
+    const btn = e.target.closest("[data-stale-toggle]");
+    if(!btn) return;
+    const id = btn.dataset.staleToggle;
+    if(staleSelected.has(id)){ staleSelected.delete(id); btn.classList.remove("checked"); }
+    else { staleSelected.add(id); btn.classList.add("checked"); }
+  });
+  document.getElementById("staleKeepAllBtn").addEventListener("click", () => {
+    staleSelected.clear();
+    closeModal("staleModalOverlay");
+  });
+  document.getElementById("staleClearBtn").addEventListener("click", () => {
+    if(!staleSelected.size){ toast("Nothing selected — tap items to check them, or Keep all"); return; }
+    state.tasks = state.tasks.filter(t => !staleSelected.has(t.id));
+    save();
+    toast(`Cleared ${staleSelected.size} thing${staleSelected.size === 1 ? "" : "s"}`);
+    staleSelected.clear();
+    closeModal("staleModalOverlay");
+    renderAll();
+  });
   document.getElementById("captureBtn").addEventListener("click", submitCapture);
   document.getElementById("captureInput").addEventListener("keydown", e => { if(e.key === "Enter") submitCapture(); });
   function submitCapture(){
@@ -2163,6 +2342,11 @@
 
   document.getElementById("themeBtn").addEventListener("click", cycleTheme);
   document.getElementById("shareBtn").addEventListener("click", openShareModal);
+  document.getElementById("searchBtn").addEventListener("click", openSearchModal);
+  document.getElementById("searchInput").addEventListener("input", e => renderSearchResults(e.target.value));
+  document.getElementById("searchResults").addEventListener("click", e => {
+    if(e.target.closest("[data-action='open']")) closeModal("searchModalOverlay");
+  });
   document.getElementById("timerFab").addEventListener("click", openTimerModal);
   document.getElementById("newHabitBtn").addEventListener("click", openHabitModal);
   document.getElementById("settingsBtn").addEventListener("click", openSettingsModal);
@@ -2504,10 +2688,62 @@
     if(d === 1) return "yesterday";
     return `${d} days ago`;
   }
+  function refreshNotifyUI(){
+    const btn = document.getElementById("enableNotifyBtn");
+    const hint = document.getElementById("notifyStatusHint");
+    if(!("Notification" in window)){
+      btn.disabled = true;
+      hint.textContent = "Notifications aren't supported in this browser.";
+      return;
+    }
+    if(state.settings.notifyEnabled && Notification.permission === "granted"){
+      btn.textContent = "🔕 Turn off daily reminder";
+      hint.textContent = "On — you'll get a nudge the next time you open the app on a day with something scheduled.";
+    } else if(Notification.permission === "denied"){
+      btn.textContent = "🔔 Enable daily reminder";
+      hint.textContent = "Blocked at the browser level — check your site permissions to allow notifications.";
+    } else {
+      btn.textContent = "🔔 Enable daily reminder";
+      hint.textContent = "";
+    }
+  }
   function openSettingsModal(){
     document.getElementById("reminderSelect").value = String(state.settings.shareReminderDays || 0);
     document.getElementById("lastBackupHint").textContent = `Last backup: ${formatWhen(state.settings.lastBackupAt)} · Last shared: ${formatWhen(state.settings.lastShareAt)}`;
+    refreshNotifyUI();
     openModal("settingsModalOverlay");
+  }
+  document.getElementById("enableNotifyBtn").addEventListener("click", async () => {
+    if(state.settings.notifyEnabled){
+      state.settings.notifyEnabled = false;
+      save();
+      refreshNotifyUI();
+      return;
+    }
+    if(!("Notification" in window)) return;
+    const perm = await Notification.requestPermission();
+    if(perm === "granted"){
+      state.settings.notifyEnabled = true;
+      save();
+      toast("Daily reminder enabled");
+    } else {
+      toast("Notifications weren't allowed — nothing turned on");
+    }
+    refreshNotifyUI();
+  });
+  function checkDailyReminder(){
+    if(!state.settings.notifyEnabled) return;
+    if(!("Notification" in window) || Notification.permission !== "granted") return;
+    if(state.settings.lastNotifyDate === todayStr()) return;
+    const items = state.tasks.filter(isInToday);
+    const habitsDue = state.habits.filter(habitDueToday).filter(h => !h.history[todayStr()]);
+    const count = items.length + habitsDue.length;
+    if(!count) return;
+    state.settings.lastNotifyDate = todayStr();
+    save();
+    try {
+      new Notification("Momentum", { body: `${count} thing${count === 1 ? "" : "s"} on today's list.`, icon: "icons/icon-192.png" });
+    } catch(e){ /* some browsers require a service worker for this — fail quietly */ }
   }
   document.getElementById("reminderSelect").addEventListener("change", e => {
     state.settings.shareReminderDays = Number(e.target.value);
@@ -2639,6 +2875,7 @@
   renderAll();
   checkShareReminder();
   checkDailyQuote();
+  checkDailyReminder();
   refreshQuotesPoolIfStale();
   refreshPhotoCounts();
 })();

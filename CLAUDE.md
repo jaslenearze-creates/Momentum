@@ -97,8 +97,12 @@ refetched from `https://type.fit/api/quotes` at most every 30 days, with a
 ~20-quote embedded fallback if that fetch fails or the device is offline).
 
 Key derived logic (not stored, computed on render):
-- **"Is this task in Today?"** = `task.inToday || task.scheduledDate === today`.
-  Scheduling something for today via the Calendar tab auto-surfaces it in Today
+- **"Is this task in Today?"** = `task.inToday || task.scheduledDate <= today`.
+  Scheduling something for today via the Calendar tab auto-surfaces it in Today.
+  The `<=` (not `===`) is deliberate: an incomplete task scheduled for a past
+  date keeps showing in Today indefinitely rather than silently vanishing once
+  the date rolls past it — no auto-promotion of `inToday`, this is pure derived
+  logic, so it stays correct even for tasks scheduled far in the past
   without a separate flag.
 - **Streaks are soft.** `computeStreak()` walks backward from today and allows
   exactly one gap day before stopping — missing a single day doesn't zero the
@@ -161,7 +165,22 @@ then open `http://localhost:8935/index.html`.
 - **Cycle tab**: simple period tracker — log start/end, see current cycle day
   and a rough next-period estimate. Explicitly labeled as an estimate, not
   medical advice; explicitly says on-device-only in the UI itself, since this
-  is more sensitive than task data.
+  is more sensitive than task data. "+ Add a missed period" lets you backdate
+  an entry with an arbitrary start/end date, for logging something after the fact.
+- **Search**: header 🔍 button, live-filters every task (any status) by title
+  substring as you type. Reuses `taskCardHtml`, so opening a result behaves
+  identically to opening it from any other list.
+- **Energy-matched backlog filter**: "How are you feeling?" chips on Backlog
+  filter to tasks tagged that energy — makes the existing low/focus energy
+  tags on tasks actually actionable instead of just a label.
+- **Gentle backlog cleanup**: tasks sitting untouched (no `scheduledDate`) for
+  30+ days surface a dismissible "N things sitting a while" note with a Review
+  action — a checkbox list to bulk-delete, framed without guilt ("no
+  judgment"). Never automatic, never blocks anything.
+- **Daily reminder notifications**: opt-in via Settings, uses the standard
+  `Notification` API. Honest limitation stated directly in the UI: this is a
+  "when you open the app" nudge, not a guaranteed background push — there's no
+  server here to deliver one while the app is fully closed.
 - **"Ask Claude to help write this"** (in the delegate section): opens
   `https://claude.ai/new?q=...` in a new tab with the task pre-filled as a
   prompt. This is a convenience shortcut, not real integration — like the
